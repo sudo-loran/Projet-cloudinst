@@ -181,7 +181,7 @@ function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
   };
 
   return (
-    <div style={styles.container}>
+    <div className="container" style={{ backgroundColor: estSombre ? '#000000' : '#f5f5f7' }}>
       <style>{`
         .menu-wrapper { position: relative; display: inline-block; }
         .btn-dots { background: transparent; border: none; cursor: pointer; padding: 0 5px; line-height: 1; }
@@ -203,7 +203,7 @@ function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
       
       <main style={styles.mainContent}>
         <section style={styles.textSection}>
-          <h1 style={styles.pageTitle}>Bienvenue sur CloudInst</h1>
+          <h1 className="title">Bienvenue sur CloudInst</h1>
           <p style={styles.paragraph}>
             CloudInst est une plateforme dédiée à l'hébergement et au partage de projets web statiques (HTML, CSS, JavaScript).
           </p>

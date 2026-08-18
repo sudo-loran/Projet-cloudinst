@@ -1,0 +1,51 @@
+:root{
+  --bg-900: #0F172A;
+  --bg-800: #1E293B;
+  --bg-700: #0B1220;
+  --muted: #9FB4D6;
+  --text: #E6EEF8;
+  --accent-1: #F6C84C;
+  --accent-2: #00B4FF;
+  --card: #081127;
+}
+
+html,body,#root{height:100%;}
+body{
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  background: linear-gradient(180deg,var(--bg-900),#000);
+  color: var(--text);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+.container{max-width:1100px;margin:0 auto;padding:24px;}
+.card{background:var(--card);border:1px solid rgba(255,255,255,0.04);border-radius:12px;padding:18px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.title{font-size:1.6rem;font-weight:700;color:var(--accent-1)}
+.muted{color:var(--muted)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+.btn-primary{background:linear-gradient(90deg,var(--accent-1),var(--accent-2));color:#071826}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text)}
+.btn-outline{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--muted)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+.card-title{font-size:1.05rem;font-weight:700}
+.card-sub{font-size:0.85rem;color:var(--muted)}
+
+/* Modal global */
+.modal-backdrop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);z-index:3000}
+.modal{width:min(720px,96%);background:var(--bg-900);border-radius:12px;padding:20px;border:1px solid rgba(255,215,0,0.06)}
+.modal h3{margin:0 0 8px 0;color:var(--accent-1)}
+.modal p{color:var(--muted);margin-bottom:12px}
+.modal-perks{display:grid;gap:8px;margin-bottom:14px}
+.perk{display:flex;gap:10px;align-items:center;color:var(--text)}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px}
+
+/* Admin table */
+.admin-table{width:100%;border-collapse:collapse;margin-top:12px}
+.admin-th{color:var(--muted);text-align:left;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.admin-td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.02);color:var(--text)}
+
+/* Responsive tweaks */
+@media (max-width:720px){.header{flex-direction:column;gap:12px}.container{padding:18px}}

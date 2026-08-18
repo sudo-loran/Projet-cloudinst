@@ -11,15 +11,20 @@ import Connexion from "./components/connexion";
 import Inscription from "./components/inscription";
 import Profil from "./components/profil";
 import CreerSite from "./components/Creersite";
+import AdminDashboard from "./components/AdminDashboard";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import { fetchMesSites } from "./api";
+import { fetchProfil } from "./api";
 
 function App() {
   const [estConnecte, setEstConnecte] = useState(false);
   const [theme, setTheme] = useState("sombre");
   const [sites, setSites] = useState([]);
   const [chargement, setChargement] = useState(true);
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch (e) { return null; }
+  });
 
   const chargerSites = async () => {
     const token = localStorage.getItem("token");
@@ -49,6 +54,29 @@ function App() {
       setChargement(false);
     }
   }, []);
+
+  // Récupération du profil utilisateur (pour role + espace utilisé)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    (async () => {
+      try {
+        const p = await fetchProfil();
+        // Attendre que le back renvoie { username, role, espaceUtilise } ou similar
+        if (p) {
+          const normalized = {
+            nom: p.username || p.nom || localStorage.getItem('username') || 'Utilisateur',
+            role: p.role || p.rol || p.type || (p.is_admin ? 'ADMIN' : 'GRATUIT'),
+            espaceUtilise: p.espace_utilise_bytes || p.espaceUtilise || 0
+          };
+          setUser(normalized);
+          try { localStorage.setItem('user', JSON.stringify(normalized)); } catch (e) {}
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [estConnecte]);
 
   const changerTheme = () => {
     setTheme((prev) => (prev === "sombre" ? "clair" : "sombre"));
@@ -142,6 +170,8 @@ function App() {
                 onModifierSite={modifierSite}
                 theme={theme}
                 onChangerTheme={changerTheme}
+                user={user}
+                onUserUpdate={setUser}
               />
             }
           />
@@ -158,6 +188,10 @@ function App() {
                 onChangerTheme={changerTheme}
               />
             }
+          />
+          <Route
+            path="/admin"
+            element={<AdminDashboard currentUser={user} onUserUpdate={setUser} />}
           />
         </Route>
       </Routes>
