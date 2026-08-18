@@ -14,8 +14,8 @@ function Header({ theme, onChangerTheme }) {
     justifyContent: "space-between",
     alignItems: "center",
     padding: "20px 40px",
-    borderBottom: `1px solid ${estSombre ? "#111111" : "#e5e5e5"}`,
-    backgroundColor: estSombre ? "#000000" : "#ffffff",
+    borderBottom: 'none',
+    backgroundColor: 'transparent',
   };
 
   return (
