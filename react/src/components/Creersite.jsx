@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { createSite, saveFichier, deleteSite, publishSite, fetchContenuSite, getSiteUrl, copierLien } from '../api';
-import PaywallModal from './PaywallModal';
 
-function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite, theme = 'sombre', onChangerTheme, user = null, onUserUpdate }) {
+function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite, theme = 'sombre', onChangerTheme }) {
   const fileInputRef = useRef(null);
   const estSombre = theme === 'sombre';
 
@@ -35,26 +34,10 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   const [siteAafficher, setSiteAafficher] = useState(null);
   const [siteEnEdition, setSiteEnEdition] = useState(null);
   const [chargement, setChargement] = useState(false);
-  const [paywallOpen, setPaywallOpen] = useState(false);
-  const [paywallMessage, setPaywallMessage] = useState('');
 
   const gererFichier = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Vérification quota côté client avant import (GRATUIT)
-      const userRole = user && user.role ? user.role : 'GRATUIT';
-      const espaceUtilise = user && user.espaceUtilise ? user.espaceUtilise : 0; // en octets
-
-      if (userRole === 'GRATUIT') {
-        const tailleFichier = file.size; // bytes
-        const limite = 2 * 1024 * 1024; // 2 MB
-        if (tailleFichier + (espaceUtilise || 0) > limite) {
-          setPaywallMessage("L'importer ce fichier dépasse la limite de stockage du compte Gratuit (2 Mo).\nPassez à Pro pour importer ce fichier.");
-          setPaywallOpen(true);
-          return;
-        }
-      }
-
       setFichierImporte(file.name);
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -102,25 +85,7 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
       .replace(/[^a-z0-9-]/g, '-')
       .replace(/-+/g, '-');
 
-    // Vérification de quota côté client avant création (pour utilisateurs GRATUIT)
     try {
-      const userRole = user && user.role ? user.role : 'GRATUIT';
-      const espaceUtilise = user && user.espaceUtilise ? user.espaceUtilise : 0; // en octets
-      const codeSize = new Blob([code]).size;
-      const limite = 2 * 1024 * 1024; // 2 MB
-
-      if (userRole === 'GRATUIT') {
-        if ((sites && sites.length >= 5) || (espaceUtilise + codeSize > limite)) {
-          let msg = '';
-          if (sites && sites.length >= 5) msg = "Vous avez atteint la limite de 5 projets pour le compte Gratuit.";
-          else msg = "La taille du code ajouté dépasse l'espace disponible sur le compte Gratuit (2 Mo).";
-          setPaywallMessage(msg);
-          setPaywallOpen(true);
-          setChargement(false);
-          return;
-        }
-      }
-
       const resSite = await createSite(sousDomaine, nomSite);
 
       if (resSite.erreur) {
@@ -221,18 +186,6 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   };
 
   const handleMultipleFiles = async (files) => {
-    // Vérification de quota pour multiple files
-    const userRole = user && user.role ? user.role : 'GRATUIT';
-    const espaceUtilise = user && user.espaceUtilise ? user.espaceUtilise : 0; // bytes
-    const limite = 2 * 1024 * 1024;
-    const totalTaille = Array.from(files).reduce((s, f) => s + (f.size || 0), 0);
-
-    if (userRole === 'GRATUIT' && (espaceUtilise + totalTaille > limite)) {
-      setPaywallMessage("L'importation dépasse la limite de stockage du compte Gratuit (2 Mo). Passez à Pro pour importer plusieurs fichiers.");
-      setPaywallOpen(true);
-      return;
-    }
-
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -241,17 +194,6 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
       reader.readAsText(file);
     }
     alert(`${files.length} fichiers importés avec succès !`);
-  };
-
-  const handleSubscribe = () => {
-    // Simuler l'abonnement côté front-end : propager la mise à jour vers App.jsx
-    if (onUserUpdate) {
-      const updated = { ...(user || {}), role: 'PRO', espaceUtilise: user && user.espaceUtilise ? user.espaceUtilise : 0 };
-      onUserUpdate(updated);
-      // sauvegarde locale pour garder l'état entre reloads
-      try { localStorage.setItem('user', JSON.stringify(updated)); } catch (e) {}
-    }
-    setPaywallOpen(false);
   };
 
   const styles = {
@@ -363,7 +305,7 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   };
 
   return (
-    <div className="container" style={{ backgroundColor: estSombre ? '#000000' : '#f5f5f7' }}>
+    <div style={styles.container}>
       {/* ICI : Ajout des classes CSS et de la Media Query pour la responsivité mobile */}
       <style>{`
         .menu-wrapper { position: relative; display: inline-block; }
@@ -430,7 +372,7 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
 
         {erreur && <div style={styles.erreurBox}>{erreur}</div>}
 
-        <div className="card">
+        <div style={styles.cardPanel}>
           <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
             <label style={{ color: estSombre ? '#888' : '#666' }}>Visibilité du projet :</label>
             <select
@@ -493,11 +435,11 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
         {sites.length === 0 ? (
           <p style={{ color: estSombre ? '#666666' : '#888888' }}>Vous n'avez pas encore créé de site.</p>
         ) : (
-          <div className="grid">
+          <div style={styles.grid}>
             {sites
               .filter(site => site && site.id && site.sous_domaine && site.date_creation)
               .map((site) => (
-                <div key={site.id} className="card">
+                <div key={site.id} style={styles.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={styles.cardTitle}>{site.titre || site.sous_domaine}</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -558,9 +500,6 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
           </div>
         </div>
       )}
-
-      {/* Modal Paywall */}
-      <PaywallModal open={paywallOpen} onClose={() => setPaywallOpen(false)} onSubscribe={handleSubscribe} message={paywallMessage} />
     </div>
   );
 }

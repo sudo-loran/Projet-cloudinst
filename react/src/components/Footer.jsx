@@ -8,9 +8,9 @@ function Footer({ theme }) {
     alignItems: 'center',
     padding: '25px 20px',
     marginTop: '40px',
-    borderTop: 'none',
-    backgroundColor: 'transparent',
-    color: estSombre ? '#9FB4D6' : '#666666',
+    borderTop: `1px solid ${estSombre ? '#111111' : '#e5e5e5'}`,
+    backgroundColor: estSombre ? '#000000' : '#ffffff',
+    color: estSombre ? '#888888' : '#666666',
     fontSize: '0.85rem'
   };
 
