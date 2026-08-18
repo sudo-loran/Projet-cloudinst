@@ -1,0 +1,8 @@
+POST  http://localhost:8000/connexion/ 
+Content-Type: application/json
+
+{
+    "username": "rayan",
+    "site": "mon site",
+    "password": "password"
+}
