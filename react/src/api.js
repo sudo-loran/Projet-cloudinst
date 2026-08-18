@@ -118,7 +118,7 @@ export const deleteFichier = (fileId) =>
   }).then(res => res.json());
 
 export const fetchExplorateur = (limite = 12, depart = 0) => 
-  fetch(`${API_URL}/explorateur/?limite=${limite}&depart=${depart}`)
+  fetch(`${API_URL}/explorateur/?limite=${limite}&depart=${depart}&_=${Date.now()}`)
     .then(res => res.json());
 
 export const searchSites = (query) => 

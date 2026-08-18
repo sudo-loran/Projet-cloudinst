@@ -1,16 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchContenuSite, getSiteUrl, copierLien } from '../api';
+import { fetchContenuSite, getSiteUrl, copierLien, fetchExplorateur } from '../api'; // <-- Ajout de fetchExplorateur
 
-function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
+function Accueil({ theme = 'sombre', onChangerTheme }) { // <-- On retire "sites = []"
   const [siteAafficher, setSiteAafficher] = useState(null);
   const [recherche, setRecherche] = useState('');
   const [chargement, setChargement] = useState(false);
+  const [sitesPublics, setSitesPublics] = useState([]); // <-- Nouveau state local
 
   const estSombre = theme === 'sombre';
 
-  const sitesPublics = sites.filter((site) => site.publication === true);
+  // <-- NOUVEAU : Appel à l'API pour récupérer TOUS les sites publics
+  useEffect(() => {
+    const chargerSitesPublics = async () => {
+      try {
+        const data = await fetchExplorateur();
+        if (data.sites) {
+          setSitesPublics(data.sites);
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des sites publics:", error);
+      }
+    };
+    chargerSitesPublics();
+  }, []);
 
+  // <-- On filtre maintenant sur le state "sitesPublics" (et non plus sur la prop "sites")
   const sitesFiltres = sitesPublics.filter((site) =>
     (site.titre || site.sous_domaine || '')
       .toLowerCase()
@@ -56,26 +71,7 @@ function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
       paddingBottom: '60px',
       transition: 'all 0.3s ease'
     },
-    navbar: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '20px 40px',
-      borderBottom: `1px solid ${estSombre ? '#111111' : '#e5e5e5'}`,
-      backgroundColor: estSombre ? '#000000' : '#ffffff'
-    },
-    logo: { fontSize: '1.4rem', fontWeight: '700', color: '#00bcd4', textDecoration: 'none' },
-    navLinks: { display: 'flex', gap: '25px', alignItems: 'center' },
-    navItem: { color: estSombre ? '#ffffff' : '#1d1d1f', textDecoration: 'none', fontSize: '0.95rem' },
-    btnTheme: {
-      backgroundColor: 'transparent',
-      border: `1px solid ${estSombre ? '#333333' : '#cccccc'}`,
-      color: estSombre ? '#ffffff' : '#1d1d1f',
-      padding: '6px 12px',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontSize: '0.85rem'
-    },
+    // <-- J'ai enlevé les styles navbar, logo, navLinks, etc. car ils sont maintenant dans le Header global de App.jsx
     mainContent: { padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' },
     textSection: {
       marginBottom: '40px',
@@ -139,16 +135,6 @@ function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
       fontSize: '0.75rem',
       color: estSombre ? '#00bcd4' : '#007b9e',
       fontFamily: 'monospace'
-    },
-    btnVoirSite: {
-      color: '#00bcd4',
-      background: 'none',
-      border: 'none',
-      textAlign: 'left',
-      padding: 0,
-      cursor: 'pointer',
-      fontSize: '0.9rem',
-      fontWeight: '600'
     },
     modalPleinEcran: {
       position: 'fixed',
