@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+django/db.sqlite3
+django/venv/
+django/env/
+
+react/node_modules/
+react/dist/
+
+.env
+*.log
+.vscode/
