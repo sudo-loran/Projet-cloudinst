@@ -8,11 +8,11 @@ const getHeaders = () => {
   };
 };
 
-export const registerUser = (username, password) => 
+export const registerUser = (username, email, password) => 
   fetch(`${API_URL}/inscription/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, email, password })
   }).then(res => res.json());
 
 export const loginUser = (username, password) => 
@@ -165,3 +165,23 @@ function copierAncienneMethode(texte) {
   document.body.removeChild(zone);
   alert('Lien copié !');
 }
+
+// --- NOUVELLES FONCTIONS POUR LE CODE DE CONFIRMATION ---
+export const envoyerCodeConfirmation = () => 
+  fetch(`${API_URL}/profil/envoyer-code/`, {
+    method: 'POST',
+    headers: getHeaders()
+  }).then(res => res.json());
+
+export const confirmerChangementMdp = (code, newPassword) => 
+  fetch(`${API_URL}/profil/confirmer-code/`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ code, new_password: newPassword })
+  }).then(res => res.json());
+
+// --- NOUVELLE FONCTION POUR LA PAGE ABONNEMENT ---
+export const fetchEspace = () => 
+  fetch(`${API_URL}/sites/espace/`, {
+    headers: getHeaders()
+  }).then(res => res.json());

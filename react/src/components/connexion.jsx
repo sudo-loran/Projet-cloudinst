@@ -6,7 +6,7 @@ function Connexion({ onLogin }) {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    username: '',
+    username: '', // Peut contenir l'email ou le username
     motDePasse: '',
   });
 
@@ -68,139 +68,27 @@ function Connexion({ onLogin }) {
       flexDirection: 'column',
       justifyContent: 'center',
     },
-    leftContent: {
-      maxWidth: '500px',
-      margin: '0 auto',
-    },
-    brandTitle: {
-      fontSize: '2.5rem',
-      fontWeight: '800',
-      color: '#00bcd4',
-      marginBottom: '15px',
-      letterSpacing: '-0.5px',
-    },
-    heroText: {
-      fontSize: '1.1rem',
-      color: '#cccccc',
-      lineHeight: '1.6',
-      marginBottom: '40px',
-    },
-    featureList: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '25px',
-    },
-    featureItem: {
-      paddingLeft: '15px',
-      borderLeft: '2px solid #00bcd4',
-    },
-    featureTitle: {
-      fontSize: '1rem',
-      fontWeight: '600',
-      color: '#ffffff',
-      margin: '0 0 6px 0',
-    },
-    featureDesc: {
-      fontSize: '0.88rem',
-      color: '#888888',
-      margin: 0,
-      lineHeight: '1.5',
-    },
-    rightSection: {
-      flex: 1,
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: '40px 20px',
-      backgroundColor: '#000000',
-    },
-    formBox: {
-      width: '100%',
-      maxWidth: '400px',
-    },
-    formHeader: {
-      marginBottom: '30px',
-    },
-    formTitle: {
-      fontSize: '2rem',
-      fontWeight: '700',
-      margin: '0 0 8px 0',
-    },
-    formSubTitle: {
-      color: '#888888',
-      fontSize: '0.9rem',
-      margin: 0,
-    },
-    erreurBox: {
-      backgroundColor: 'rgba(239, 68, 68, 0.15)',
-      border: '1px solid rgba(239, 68, 68, 0.3)',
-      color: '#ef4444',
-      padding: '12px 16px',
-      borderRadius: '8px',
-      fontSize: '0.88rem',
-      marginBottom: '20px',
-    },
-    group: {
-      marginBottom: '20px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '8px',
-    },
-    label: {
-      color: '#cccccc',
-      fontSize: '0.85rem',
-      fontWeight: '500',
-    },
-    input: {
-      width: '100%',
-      padding: '12px 16px',
-      borderRadius: '8px',
-      border: '1px solid #333333',
-      backgroundColor: '#121212',
-      color: '#ffffff',
-      fontSize: '0.95rem',
-      outline: 'none',
-      boxSizing: 'border-box',
-    },
-    passwordWrapper: {
-      position: 'relative',
-      display: 'flex',
-      alignItems: 'center',
-    },
-    toggleBtn: {
-      position: 'absolute',
-      right: '12px',
-      background: 'none',
-      border: 'none',
-      color: '#888888',
-      cursor: 'pointer',
-      fontSize: '0.8rem',
-      padding: 0,
-    },
-    btnSubmit: {
-      width: '100%',
-      padding: '14px',
-      borderRadius: '8px',
-      border: 'none',
-      backgroundColor: '#00bcd4',
-      color: '#000000',
-      fontSize: '1rem',
-      fontWeight: '600',
-      cursor: chargement ? 'not-allowed' : 'pointer',
-      opacity: chargement ? 0.7 : 1,
-      marginTop: '10px',
-    },
-    footerText: {
-      marginTop: '25px',
-      color: '#888888',
-      fontSize: '0.88rem',
-      textAlign: 'center',
-    },
-    link: {
-      color: '#00bcd4',
-      textDecoration: 'none',
-      fontWeight: '500',
-    },
+    leftContent: { maxWidth: '500px', margin: '0 auto' },
+    brandTitle: { fontSize: '2.5rem', fontWeight: '800', color: '#00bcd4', marginBottom: '15px', letterSpacing: '-0.5px' },
+    heroText: { fontSize: '1.1rem', color: '#cccccc', lineHeight: '1.6', marginBottom: '40px' },
+    featureList: { display: 'flex', flexDirection: 'column', gap: '25px' },
+    featureItem: { paddingLeft: '15px', borderLeft: '2px solid #00bcd4' },
+    featureTitle: { fontSize: '1rem', fontWeight: '600', color: '#ffffff', margin: '0 0 6px 0' },
+    featureDesc: { fontSize: '0.88rem', color: '#888888', margin: 0, lineHeight: '1.5' },
+    rightSection: { flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 20px', backgroundColor: '#000000' },
+    formBox: { width: '100%', maxWidth: '400px' },
+    formHeader: { marginBottom: '30px' },
+    formTitle: { fontSize: '2rem', fontWeight: '700', margin: '0 0 8px 0' },
+    formSubTitle: { color: '#888888', fontSize: '0.9rem', margin: 0 },
+    erreurBox: { backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '12px 16px', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '20px' },
+    group: { marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' },
+    label: { color: '#cccccc', fontSize: '0.85rem', fontWeight: '500' },
+    input: { width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #333333', backgroundColor: '#121212', color: '#ffffff', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box' },
+    passwordWrapper: { position: 'relative', display: 'flex', alignItems: 'center' },
+    toggleBtn: { position: 'absolute', right: '12px', background: 'none', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '0.8rem', padding: 0 },
+    btnSubmit: { width: '100%', padding: '14px', borderRadius: '8px', border: 'none', backgroundColor: '#00bcd4', color: '#000000', fontSize: '1rem', fontWeight: '600', cursor: chargement ? 'not-allowed' : 'pointer', opacity: chargement ? 0.7 : 1, marginTop: '10px' },
+    footerText: { marginTop: '25px', color: '#888888', fontSize: '0.88rem', textAlign: 'center' },
+    link: { color: '#00bcd4', textDecoration: 'none', fontWeight: '500' },
   };
 
   return (
@@ -248,14 +136,15 @@ function Connexion({ onLogin }) {
 
           <form onSubmit={handleSubmit}>
             <div style={styles.group}>
+              {/* Label modifié pour accepter l'email */}
               <label style={styles.label} htmlFor="username">
-                Nom d'utilisateur
+                Nom d'utilisateur ou email
               </label>
               <input
                 id="username"
                 type="text"
                 name="username"
-                placeholder="Ex: alex_dev"
+                placeholder="Ex: alex_dev ou alex@mail.com"
                 value={formData.username}
                 onChange={handleChange}
                 style={styles.input}

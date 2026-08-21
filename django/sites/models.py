@@ -26,6 +26,26 @@ class Site(models.Model):
         return f"{self.sous_domaine} ({self.utilisateur.username})"
 
 
+import random
+from django.utils import timezone
+
+class PasswordResetCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        # Le code expire au bout de 10 minutes
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=10)
+
+    @staticmethod
+    def generate_code(user):
+        # Supprime les anciens codes de l'utilisateur
+        PasswordResetCode.objects.filter(user=user).delete()
+        # Génère un code à 6 chiffres
+        new_code = str(random.randint(100000, 999999))
+        return PasswordResetCode.objects.create(user=user, code=new_code)
+
 class SiteFile(models.Model):
     MAX_FILE_SIZE = 10 * 1024 * 1024   
 
@@ -108,9 +128,9 @@ class SiteStatistique(models.Model):
         ]
 
     def incrementer_page(self, page):
-        """Incrémente le compteur de pages vues"""
         self.pages_vues[page] = self.pages_vues.get(page, 0) + 1
         self.save(update_fields=["pages_vues"])
 
     def __str__(self):
         return f"{self.site.sous_domaine} - {self.date}"
+

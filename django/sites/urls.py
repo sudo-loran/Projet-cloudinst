@@ -14,9 +14,13 @@ urlpatterns = [
     path('sites/<int:site_id>/statistiques/', views.statistiques_site, name='statistiques_site'),
     path('sites/<int:site_id>/fichiers/', views.fichiers_site, name='liste_fichiers'),
     path('sites/fichiers/enregistrer/', views.enregistrer_fichier, name='enregistrer_fichier'),
+    path('sites/fichiers/importer/', views.importer_fichiers, name='importer_fichiers'),
     path('fichiers/<int:file_id>/supprimer/', views.supprimer_fichier, name='supprimer_fichier'),
     path('explorateur/', views.explorateur, name='explorateur_sites'),
     path('recherche/', views.recherche_sites, name='recherche_sites'),
     path('apercu/<str:sous_domaine>/', views.apercu, name='apercu_index'),
     path('apercu/<str:sous_domaine>/<path:filename>', views.apercu, name='apercu_fichier'),
+    path('sites/espace/', views.espace_utilisateur, name='espace_utilisateur'),
+    path('profil/envoyer-code/', views.envoyer_code_confirmation, name='envoyer_code'),
+    path('profil/confirmer-code/', views.confirmer_code_confirmation, name='confirmer_code'),
 ]

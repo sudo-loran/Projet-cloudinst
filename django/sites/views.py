@@ -1,27 +1,22 @@
 import re
 import os
-import mimetypes
 from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q, Sum, F
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from rest_framework.decorators import parser_classes
-from django.http import Http404, HttpResponse, FileResponse
+from django.http import Http404, HttpResponse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import (
-    api_view,
-    authentication_classes,
-    permission_classes,
-)
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
 from .models import Site, SiteFile, SiteFileVersion, SiteStatistique
 from .serializers import SiteFileSerializer, SiteSerializer
+from .utils import resoudre_fichier_site, deviner_content_type
 
 SOUS_DOMAINES = {
     "admin",
@@ -34,25 +29,30 @@ SOUS_DOMAINES = {
     "register",
     "dashboard",
 }
-SOUSDOMAIN = r"^[a-z0-9-]{3,30}$"
+SOUSDOMAIN = r"^[a-z0-9-]{2,30}$"
 MAX_TAILLE = 10 * 1024 * 1024
 MAX_STOCKAGE = 50 * 1024 * 1024
 MAX_FICHIER = 50
 
+
 @api_view(["POST"])
 def inscription(request):
     username = request.data.get("username")
+    email = request.data.get("email")
     password = request.data.get("password")
 
-    if not username or not password:
+    if not username or not email or not password:
         return Response(
-            {"erreur": "Nom d'utilisateur et mot de passe requis"}, status=400
+            {"erreur": "Nom d'utilisateur, email et mot de passe requis"}, status=400
         )
 
     if User.objects.filter(username__iexact=username).exists():
         return Response({"erreur": "Ce nom d'utilisateur est déjà pris"}, status=400)
 
-    User.objects.create_user(username=username, password=password)
+    if User.objects.filter(email__iexact=email).exists():
+        return Response({"erreur": "Cet email est déjà utilisé"}, status=400)
+
+    User.objects.create_user(username=username, email=email, password=password)
     return Response({"message": "Compte créé avec succès"}, status=201)
 
 
@@ -111,6 +111,60 @@ def profil(request):
     request.user.save()
     return Response({"message": "Profil mis à jour avec succès"})
 
+from django.core.mail import send_mail
+from django.conf import settings
+from .models import PasswordResetCode
+
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def envoyer_code_confirmation(request):
+    user = request.user
+    # Vérifier que l'utilisateur a bien un email
+    if not user.email:
+        return Response({"erreur": "Vous n'avez pas d'adresse email enregistrée."}, status=400)
+
+    # Générer et sauvegarder le code
+    code_obj = PasswordResetCode.generate_code(user)
+    
+    # Envoyer l'email
+    send_mail(
+        subject="Code de confirmation CloudInst",
+        message=f"Bonjour {user.username},\n\nVoici votre code de confirmation pour changer votre mot de passe : {code_obj.code}\n\nCe code est valable 10 minutes.\n\n-- L'équipe CloudInst",
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+    return Response({"message": "Code de confirmation envoyé par email."})
+
+
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def confirmer_code_confirmation(request):
+    user = request.user
+    code_saisi = request.data.get("code")
+    nouveau_mdp = request.data.get("new_password")
+
+    if not code_saisi or not nouveau_mdp:
+        return Response({"erreur": "Code et nouveau mot de passe requis."}, status=400)
+
+    try:
+        code_obj = PasswordResetCode.objects.get(user=user, code=code_saisi)
+    except PasswordResetCode.DoesNotExist:
+        return Response({"erreur": "Code invalide."}, status=400)
+
+    if code_obj.is_expired():
+        code_obj.delete()
+        return Response({"erreur": "Le code a expiré. Veuillez en demander un nouveau."}, status=400)
+
+    # Tout est bon, on change le mot de passe et on supprime le code
+    user.set_password(nouveau_mdp)
+    user.save()
+    code_obj.delete()
+
+    return Response({"message": "Mot de passe modifié avec succès !"})
 
 @api_view(["DELETE"])
 @authentication_classes([TokenAuthentication])
@@ -137,7 +191,7 @@ def mes_sites(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def creer_site(request):
-   
+
     sous_domaine = (request.data.get("sous_domaine") or "").strip().lower()
     titre = (request.data.get("titre") or "").strip()
 
@@ -152,7 +206,7 @@ def creer_site(request):
     if not re.match(SOUSDOMAIN, sous_domaine):
         return Response(
             {
-                "erreur": "Le sous-domaine doit contenir entre 3 et 30 caractères (minuscules, chiffres, tirets)"
+                "erreur": "Le sous-domaine doit contenir entre 2 et 30 caractères (minuscules, chiffres, tirets)"
             },
             status=400,
         )
@@ -178,7 +232,7 @@ def creer_site(request):
     else:
         titre = sous_domaine
 
-    MAX_SITES = getattr(settings, "MAX_SITES ", 10)
+    MAX_SITES = getattr(settings, "MAX_SITES", 10)
     if request.user.sites.count() >= MAX_SITES:
         return Response(
             {
@@ -190,10 +244,8 @@ def creer_site(request):
     if request.user.sites.filter(titre__iexact=titre).exists():
         return Response({"erreur": "Vous avez déjà un site avec ce titre"}, status=400)
 
-    from django.db import transaction
-
     try:
-        
+        with transaction.atomic():
             site = Site.objects.create(
                 utilisateur=request.user, sous_domaine=sous_domaine, titre=titre
             )
@@ -213,7 +265,6 @@ def creer_site(request):
             SiteFile.objects.create(
                 site=site, filename="index.html", contenu=code_html_defaut
             )
-
     except Exception as e:
         return Response(
             {"erreur": f"Erreur lors de la création du site: {str(e)}"}, status=500
@@ -256,6 +307,7 @@ def fichiers_site(request, site_id):
         }
     )
 
+
 @api_view(["POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -269,17 +321,27 @@ def enregistrer_fichier(request):
 
     filename = os.path.normpath(nom_fichier.strip())
 
-    if not filename or filename.startswith("."):
+    if not filename or filename in ('.', '..') or filename.startswith('..') or filename.startswith('/'):
         return Response({"erreur": "Nom de fichier invalide"}, status=400)
 
-   
+    if '..' in filename.split(os.sep):
+        return Response({"erreur": "Nom de fichier invalide"}, status=400)
+
+    basename = os.path.basename(filename)
+    if not basename or basename.startswith('.'):
+        return Response({"erreur": "Nom de fichier invalide"}, status=400)
+
+    filename = filename.replace(os.sep, '/')
 
     try:
         site = request.user.sites.get(id=site_id)
     except Site.DoesNotExist:
         return Response({"erreur": "Site introuvable"}, status=404)
 
-    if site.files.count() >= MAX_FICHIER:
+    fichier_existant = site.files.filter(filename=filename).first()
+
+    # Le quota de nombre de fichiers ne s'applique qu'à la création d'un nouveau fichier
+    if fichier_existant is None and site.files.count() >= MAX_FICHIER:
         return Response(
             {"erreur": f"Nombre maximum de fichiers atteint ({MAX_FICHIER})"},
             status=400,
@@ -294,15 +356,17 @@ def enregistrer_fichier(request):
             status=400,
         )
 
+    # On exclut la taille actuelle de CE fichier du calcul, sinon on la compte deux fois
+    # (une fois comme "déjà utilisé", une fois comme "nouveau contenu") lors d'une simple édition.
     total_utilise = (
-        SiteFile.objects.filter(site__utilisateur=request.user).aggregate(
-            total=Sum("taille")
-        )["total"]
+        SiteFile.objects.filter(site__utilisateur=request.user)
+        .exclude(site=site, filename=filename)
+        .aggregate(total=Sum("taille"))["total"]
         or 0
     )
 
     if total_utilise + contenu_size > MAX_STOCKAGE:
-        espace_restant = MAX_STOCKAGE - total_utilise
+        espace_restant = max(MAX_STOCKAGE - total_utilise, 0)
         return Response(
             {
                 "erreur": f"Espace de stockage insuffisant. Utilisé : {total_utilise // (1024*1024)} Mo / {MAX_STOCKAGE // (1024*1024)} Mo. Espace restant : {espace_restant // 1024} Ko"
@@ -310,15 +374,13 @@ def enregistrer_fichier(request):
             status=400,
         )
 
-    try:
-        existing_file = site.files.get(filename=filename)
-        ancien_contenu = existing_file.contenu
-        ancienne_taille = existing_file.taille
+    if fichier_existant is not None:
+        ancien_contenu = fichier_existant.contenu
+        ancienne_taille = fichier_existant.taille
 
-        existing_file.contenu = contenu
-        existing_file.save()
-        fichier = existing_file
-        created = False
+        fichier_existant.contenu = contenu
+        fichier_existant.save()
+        fichier = fichier_existant
 
         SiteFileVersion.objects.create(
             fichier=fichier,
@@ -327,9 +389,8 @@ def enregistrer_fichier(request):
             auteur=request.user,
             message=f"Mise à jour de {filename}",
         )
-    except SiteFile.DoesNotExist:
+    else:
         fichier = SiteFile.objects.create(site=site, filename=filename, contenu=contenu)
-        created = True
 
     serializer = SiteFileSerializer(fichier)
     return Response({"message": "Fichier enregistré", "fichier": serializer.data})
@@ -370,12 +431,14 @@ def publier_site(request, site_id):
 
 @xframe_options_exempt
 def apercu(request, sous_domaine, filename="index.html"):
-    import os
-    chemin = os.path.normpath(filename)
-    if chemin.startswith('..') or chemin.startswith('/') or chemin in ('.', '..'):
-        return HttpResponse("Chemin invalide", status=400)
-    filename = chemin
+    """
+    Vue de preview : /apercu/<sous_domaine>/ ou /apercu/<sous_domaine>/<path:filename>
 
+    Utilise la même logique de résolution que le middleware de production
+    (resoudre_fichier_site), pour que la preview corresponde exactement
+    à ce que verrait un visiteur sur le vrai sous-domaine, y compris
+    pour les sites en mode "dossier" avec des sous-chemins comme blog/article.html.
+    """
     try:
         site = Site.objects.get(sous_domaine=sous_domaine)
     except Site.DoesNotExist:
@@ -393,17 +456,17 @@ def apercu(request, sous_domaine, filename="index.html"):
             return HttpResponse("Token invalide", status=401)
 
     try:
-        fichier = site.files.get(filename=filename)
-    except SiteFile.DoesNotExist:
+        fichier = resoudre_fichier_site(site, filename)
+    except ValueError:
+        return HttpResponse("Chemin invalide", status=400)
+
+    if fichier is None:
         return HttpResponse(f"Le fichier '{filename}' n'existe pas sur ce site.", status=404)
 
-    if site.publication and filename == "index.html":
+    if site.publication and fichier.filename == "index.html":
         Site.objects.filter(pk=site.pk).update(nb_visites=F("nb_visites") + 1)
 
-    content_type, _ = mimetypes.guess_type(filename)
-    if not content_type:
-        content_type = "text/plain"
-
+    content_type = deviner_content_type(fichier.filename)
     return HttpResponse(fichier.contenu, content_type=content_type)
 
 
@@ -423,7 +486,7 @@ def explorateur(request):
         .order_by("-date_publication")
     )
     total = sites_publics.count()
-    page = sites_publics[depart : depart + limite]
+    page = sites_publics[depart: depart + limite]
 
     data = [
         {
@@ -474,12 +537,6 @@ def recherche_sites(request):
     return Response({"sites": data, "total": len(data)})
 
 
-
-
-
-
-
-
 @api_view(["POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -497,12 +554,29 @@ def importer_fichiers(request):
         filename = fichier_data.get("filename")
         contenu = fichier_data.get("contenu", "")
 
+        if not filename:
+            resultats.append({"filename": filename, "erreur": "nom de fichier manquant"})
+            continue
+
+        filename_normalise = os.path.normpath(filename.strip())
+        if (
+            not filename_normalise
+            or filename_normalise in ('.', '..')
+            or filename_normalise.startswith('..')
+            or filename_normalise.startswith('/')
+            or '..' in filename_normalise.split(os.sep)
+        ):
+            resultats.append({"filename": filename, "erreur": "chemin invalide"})
+            continue
+
+        filename_normalise = filename_normalise.replace(os.sep, '/')
+
         fichier, created = SiteFile.objects.update_or_create(
-            site=site, filename=filename, defaults={"contenu": contenu}
+            site=site, filename=filename_normalise, defaults={"contenu": contenu}
         )
 
         resultats.append(
-            {"filename": filename, "created": created, "taille": fichier.taille}
+            {"filename": filename_normalise, "created": created, "taille": fichier.taille}
         )
 
     return Response(
@@ -539,3 +613,20 @@ def statistiques_site(request, site_id):
             "date_publication": site.date_publication,
         }
     )
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def espace_utilisateur(request):
+    total_utilise = SiteFile.objects.filter(site__utilisateur=request.user).aggregate(total=Sum("taille"))["total"] or 0
+    used_mb = round(total_utilise / (1024 * 1024), 2)
+    max_mb = MAX_STOCKAGE / (1024 * 1024)  # 50 Mo
+
+    total_fichiers = SiteFile.objects.filter(site__utilisateur=request.user).count()
+    
+    return Response({
+        "used_mb": used_mb,
+        "max_mb": max_mb,
+        "used_files": total_fichiers,
+        "max_files": MAX_FICHIER
+    })

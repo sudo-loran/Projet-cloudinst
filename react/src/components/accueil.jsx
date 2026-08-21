@@ -1,36 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchContenuSite, getSiteUrl, copierLien, fetchExplorateur } from '../api'; // <-- Ajout de fetchExplorateur
+import { fetchContenuSite, getSiteUrl, copierLien } from '../api';
 
-function Accueil({ theme = 'sombre', onChangerTheme }) { // <-- On retire "sites = []"
+function Accueil({ sites = [], theme = 'sombre', onChangerTheme }) {
   const [siteAafficher, setSiteAafficher] = useState(null);
   const [recherche, setRecherche] = useState('');
+  const [filtreVisibilite, setFiltreVisibilite] = useState('tous');
   const [chargement, setChargement] = useState(false);
-  const [sitesPublics, setSitesPublics] = useState([]); // <-- Nouveau state local
 
   const estSombre = theme === 'sombre';
 
-  // <-- NOUVEAU : Appel à l'API pour récupérer TOUS les sites publics
-  useEffect(() => {
-    const chargerSitesPublics = async () => {
-      try {
-        const data = await fetchExplorateur();
-        if (data.sites) {
-          setSitesPublics(data.sites);
-        }
-      } catch (error) {
-        console.error("Erreur lors du chargement des sites publics:", error);
-      }
-    };
-    chargerSitesPublics();
-  }, []);
-
-  // <-- On filtre maintenant sur le state "sitesPublics" (et non plus sur la prop "sites")
-  const sitesFiltres = sitesPublics.filter((site) =>
-    (site.titre || site.sous_domaine || '')
+  // On ne filtre que les sites de l'utilisateur (venant de la prop sites)
+  const sitesFiltres = sites.filter((site) => {
+    // 1. Filtre par texte (titre ou sous-domaine)
+    const matchRecherche = (site.titre || site.sous_domaine || '')
       .toLowerCase()
-      .includes(recherche.toLowerCase())
-  );
+      .includes(recherche.toLowerCase());
+    
+    // 2. Filtre par visibilité (Public / Privé)
+    let matchVisibilite = true;
+    if (filtreVisibilite === 'public') {
+      matchVisibilite = site.publication === true;
+    } else if (filtreVisibilite === 'prive') {
+      matchVisibilite = site.publication === false;
+    }
+
+    return matchRecherche && matchVisibilite;
+  });
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -71,35 +67,14 @@ function Accueil({ theme = 'sombre', onChangerTheme }) { // <-- On retire "sites
       paddingBottom: '60px',
       transition: 'all 0.3s ease'
     },
-    // <-- J'ai enlevé les styles navbar, logo, navLinks, etc. car ils sont maintenant dans le Header global de App.jsx
     mainContent: { padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' },
     textSection: {
-      marginBottom: '40px',
+      marginBottom: '30px',
       lineHeight: '1.6'
     },
     pageTitle: { fontSize: '2rem', fontWeight: '800', marginBottom: '15px' },
     paragraph: { color: estSombre ? '#aaaaaa' : '#555555', fontSize: '1.05rem', marginBottom: '10px' },
-    topBar: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '25px',
-      flexWrap: 'wrap',
-      gap: '15px',
-      paddingTop: '20px',
-      borderTop: `1px solid ${estSombre ? '#111111' : '#e5e5e5'}`
-    },
-    sectionTitle: { fontSize: '1.4rem', fontWeight: '700', margin: 0 },
-    searchInput: {
-      padding: '10px 16px',
-      borderRadius: '8px',
-      border: `1px solid ${estSombre ? '#333333' : '#cccccc'}`,
-      backgroundColor: estSombre ? '#121212' : '#ffffff',
-      color: estSombre ? '#ffffff' : '#000000',
-      fontSize: '0.9rem',
-      width: '280px',
-      outline: 'none'
-    },
+    sectionTitle: { fontSize: '1.4rem', fontWeight: '700', margin: '0 0 15px 0' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
     card: {
       backgroundColor: estSombre ? '#0a0a0a' : '#ffffff',
@@ -198,54 +173,80 @@ function Accueil({ theme = 'sombre', onChangerTheme }) { // <-- On retire "sites
           </p>
         </section>
 
-        <div style={styles.topBar}>
-          <h2 style={styles.sectionTitle}>Liste des sites publics</h2>
-          <input
-            type="text"
-            placeholder="Rechercher un site..."
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-            style={styles.searchInput}
-          />
-        </div>
+        {/* Section des sites personnels */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+            <h2 style={styles.sectionTitle}>Mes sites</h2>
+            
+            {/* Barre de recherche + Filtre par visibilité */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                placeholder="Rechercher un site..."
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: `1px solid ${estSombre ? '#333333' : '#cccccc'}`,
+                  backgroundColor: estSombre ? '#121212' : '#ffffff',
+                  color: estSombre ? '#ffffff' : '#000000',
+                  fontSize: '0.9rem',
+                  width: '200px',
+                  outline: 'none'
+                }}
+              />
+              <select
+                value={filtreVisibilite}
+                onChange={(e) => setFiltreVisibilite(e.target.value)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: `1px solid ${estSombre ? '#333333' : '#cccccc'}`,
+                  backgroundColor: estSombre ? '#121212' : '#ffffff',
+                  color: estSombre ? '#ffffff' : '#000000',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="tous">Tous</option>
+                <option value="public">Publics</option>
+                <option value="prive">Privés</option>
+              </select>
+            </div>
+          </div>
 
-        {sitesFiltres.length === 0 ? (
-          <p style={{ color: estSombre ? '#666666' : '#888888' }}>
-            {recherche ? `Aucun site ne correspond à "${recherche}".` : 'Aucun site public disponible pour le moment.'}
-          </p>
-        ) : (
-          <div style={styles.grid}>
-            {sitesFiltres.map((site) => (
-              <div key={site.id} style={styles.card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={styles.cardTitle}>{site.titre || site.sous_domaine}</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={styles.badgeVisibilite('public')}>Public</span>
-                    <div className={`menu-wrapper ${estSombre ? 'menu-dark' : 'menu-light'}`}>
-                      <button className="btn-dots" onClick={(e) => toggleMenu(e.currentTarget)}>⋮</button>
-                      <div className="dropdown-menu" id={`menu-${site.id}`}>
-                        <button onClick={() => copierLien(getSiteUrl(site.sous_domaine))}>Copier le lien</button>
-                        <button onClick={() => window.open(getSiteUrl(site.sous_domaine), '_blank')}>Ouvrir</button>
+          {sites.length === 0 ? (
+            <p style={{ color: estSombre ? '#666666' : '#888888' }}>
+              Vous n'avez pas encore créé de site. Allez dans <Link to="/creersite" style={{ color: '#00bcd4' }}>Créer un site</Link> pour commencer.
+            </p>
+          ) : (
+            <div style={styles.grid}>
+              {sitesFiltres.map((site) => (
+                <div key={site.id} style={styles.card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={styles.cardTitle}>{site.titre || site.sous_domaine}</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={styles.badgeVisibilite(site.publication ? 'public' : 'prive')}>
+                        {site.publication ? 'Public' : 'Privé'}
+                      </span>
+                      <div className={`menu-wrapper ${estSombre ? 'menu-dark' : 'menu-light'}`}>
+                        <button className="btn-dots" onClick={(e) => toggleMenu(e.currentTarget)}>⋮</button>
+                        <div className="dropdown-menu" id={`menu-${site.id}`}>
+                          <button onClick={() => copierLien(getSiteUrl(site.sous_domaine))}>Copier le lien</button>
+                          <button onClick={() => window.open(getSiteUrl(site.sous_domaine), '_blank')}>Ouvrir</button>
+                        </div>
                       </div>
                     </div>
                   </div>
+                  <p style={styles.cardDate}>Créé le : {new Date(site.date_creation).toLocaleDateString('fr-FR')}</p>
+                  <p style={styles.cardDate}>Visites : {site.nb_visites || 0}</p>
                 </div>
-                <p style={styles.cardDate}>
-                  Publié le : {site.date_publication ? new Date(site.date_publication).toLocaleDateString('fr-FR') : 'Date inconnue'}
-                </p>
-                <p style={styles.cardDate}>
-                  Visites : {site.nb_visites || 0}
-                </p>
-
-                <div style={styles.boiteLien}>
-                  <span style={styles.texteLien}>
-                    {getSiteUrl(site.sous_domaine)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </main>
 
       {siteAafficher && (

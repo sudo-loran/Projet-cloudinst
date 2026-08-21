@@ -2,21 +2,17 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 function Inscription({ onLogin }) {
-  // 1. Gestion des données du formulaire (avec username)
   const [formData, setFormData] = useState({
     nomComplet: '',
     username: '',
+    email: '',
     motDePasse: '',
     confirmerMotDePasse: '',
   });
 
-  // 2. État pour stocker le message d'erreur des mots de passe
   const [erreurMotDePasse, setErreurMotDePasse] = useState('');
-
-  // 3. Initialisation de l'outil de redirection
   const navigate = useNavigate();
 
-  // Fonction pour mettre à jour les champs à la saisie
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prevState) => ({
@@ -25,66 +21,63 @@ function Inscription({ onLogin }) {
     })); 
   };
 
-  // Fonction appelée lors du clic sur "S'inscrire"
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (formData.motDePasse !== formData.confirmerMotDePasse) {
-    setErreurMotDePasse("Les mots de passe ne correspondent pas !");
-    return;
-  }
-  setErreurMotDePasse("");
-
-  try {
-    // 1. Appel d'inscription
-    const response = await fetch('http://127.0.0.1:8000/inscription/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: formData.username,
-        password: formData.motDePasse,
-      }),
-    });
-
-    const data = await response.json();
-
-    // Si l'inscription échoue (ex: nom d'utilisateur déjà pris), ON S'ARRÊTE
-    if (!response.ok) {
-      setErreurMotDePasse(data.erreur || "Une erreur est survenue.");
-      return; 
-    }
-
-    // 2. Appel de connexion (Exécuté SEULEMENT si l'inscription a réussi)
-    const connexionResponse = await fetch('http://127.0.0.1:8000/connexion/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: formData.username,
-        password: formData.motDePasse,
-      }),
-    });
-
-    const connexionData = await connexionResponse.json();
-
-    // Si la connexion automatique échoue
-    if (!connexionResponse.ok) {
-      setErreurMotDePasse(connexionData.erreur || "Erreur de connexion.");
+    if (formData.motDePasse !== formData.confirmerMotDePasse) {
+      setErreurMotDePasse("Les mots de passe ne correspondent pas !");
       return;
     }
+    setErreurMotDePasse("");
 
-    // Si tout est OK : Stockage et Redirection
-    localStorage.setItem('token', connexionData.token);
-    localStorage.setItem('username', connexionData.username);
+    try {
+      // 1. Appel d'inscription (avec email)
+      const response = await fetch('http://127.0.0.1:8000/inscription/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          password: formData.motDePasse,
+        }),
+      });
 
-    if (onLogin) onLogin(true);
-    navigate('/');
+      const data = await response.json();
 
-  } catch (error) {
-    setErreurMotDePasse("Impossible de contacter le serveur.");
-  }
-};
+      if (!response.ok) {
+        setErreurMotDePasse(data.erreur || "Une erreur est survenue.");
+        return; 
+      }
 
-  // --- STYLES ---
+      // 2. Appel de connexion
+      const connexionResponse = await fetch('http://127.0.0.1:8000/connexion/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.motDePasse,
+        }),
+      });
+
+      const connexionData = await connexionResponse.json();
+
+      if (!connexionResponse.ok) {
+        setErreurMotDePasse(connexionData.erreur || "Erreur de connexion.");
+        return;
+      }
+
+      localStorage.setItem('token', connexionData.token);
+      localStorage.setItem('username', connexionData.username);
+      localStorage.setItem('email', formData.email); // On stocke l'email aussi
+
+      if (onLogin) onLogin(true);
+      navigate('/');
+
+    } catch (error) {
+      setErreurMotDePasse("Impossible de contacter le serveur.");
+    }
+  };
+
   const styles = {
     container: {
       maxWidth: '450px',
@@ -96,33 +89,11 @@ const handleSubmit = async (e) => {
       color: '#ffffff',
       fontFamily: 'Segoe UI, Roboto, Helvetica Neue, sans-serif',
     },
-    titre: {
-      textAlign: 'center',
-      marginBottom: '10px',
-      fontSize: '28px',
-      fontWeight: '600',
-    },
-    sousTitre: {
-      textAlign: 'center',
-      color: '#b0b0b0',
-      marginBottom: '30px',
-      fontSize: '15px',
-    },
-    form: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-    },
-    inputGroup: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '8px',
-    },
-    label: {
-      fontSize: '14px',
-      fontWeight: '500',
-      color: '#e0e0e0',
-    },
+    titre: { textAlign: 'center', marginBottom: '10px', fontSize: '28px', fontWeight: '600' },
+    sousTitre: { textAlign: 'center', color: '#b0b0b0', marginBottom: '30px', fontSize: '15px' },
+    form: { display: 'flex', flexDirection: 'column', gap: '20px' },
+    inputGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    label: { fontSize: '14px', fontWeight: '500', color: '#e0e0e0' },
     input: {
       padding: '12px 15px',
       borderRadius: '8px',
@@ -153,20 +124,9 @@ const handleSubmit = async (e) => {
       fontSize: '16px',
       fontWeight: '600',
       cursor: 'pointer',
-      transition: 'background-color 0.2s',
     },
-    lienContainer: {
-      marginTop: '25px',
-      textAlign: 'center',
-      fontSize: '14px',
-      color: '#b0b0b0',
-    },
-    lien: {
-      color: '#00bcd4',
-      textDecoration: 'none',
-      fontWeight: '500',
-      marginLeft: '5px',
-    },
+    lienContainer: { marginTop: '25px', textAlign: 'center', fontSize: '14px', color: '#b0b0b0' },
+    lien: { color: '#00bcd4', textDecoration: 'none', fontWeight: '500', marginLeft: '5px' },
   };
 
   return (
@@ -175,7 +135,7 @@ const handleSubmit = async (e) => {
       <p style={styles.sousTitre}>Rejoignez notre plateforme en quelques secondes.</p>
 
       <form style={styles.form} onSubmit={handleSubmit}>
-        {/* Champ Nom Complet */}
+        {/* Nom Complet */}
         <div style={styles.inputGroup}>
           <label htmlFor="nomComplet" style={styles.label}>Nom complet</label>
           <input
@@ -190,7 +150,7 @@ const handleSubmit = async (e) => {
           />
         </div>
 
-        {/* Champ Nom d'utilisateur (Username) */}
+        {/* Nom d'utilisateur */}
         <div style={styles.inputGroup}>
           <label htmlFor="username" style={styles.label}>Nom d'utilisateur</label>
           <input
@@ -205,7 +165,22 @@ const handleSubmit = async (e) => {
           />
         </div>
 
-        {/* Champ Mot de passe */}
+        {/* NOUVEAU CHAMP EMAIL */}
+        <div style={styles.inputGroup}>
+          <label htmlFor="email" style={styles.label}>Adresse email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="jean@exemple.com"
+            value={formData.email}
+            onChange={handleChange}
+            style={styles.input}
+            required
+          />
+        </div>
+
+        {/* Mot de passe */}
         <div style={styles.inputGroup}>
           <label htmlFor="motDePasse" style={styles.label}>Mot de passe</label>
           <input
@@ -221,7 +196,7 @@ const handleSubmit = async (e) => {
           />
         </div>
 
-        {/* Champ Confirmer le mot de passe */}
+        {/* Confirmer mot de passe */}
         <div style={styles.inputGroup}>
           <label htmlFor="confirmerMotDePasse" style={styles.label}>Confirmer le mot de passe</label>
           <input
@@ -237,23 +212,14 @@ const handleSubmit = async (e) => {
           />
         </div>
 
-        {/* Affichage du message d'erreur */}
         {erreurMotDePasse && <p style={styles.erreur}>{erreurMotDePasse}</p>}
 
-        {/* Bouton de soumission */}
-        <button
-          type="submit"
-          style={styles.bouton}
-        >
-          S'inscrire
-        </button>
+        <button type="submit" style={styles.bouton}>S'inscrire</button>
       </form>
 
       <div style={styles.lienContainer}>
         Déjà inscrit ?
-        <Link to="/" style={styles.lien}>
-          Se connecter
-        </Link>
+        <Link to="/" style={styles.lien}>Se connecter</Link>
       </div>
     </div>
   );

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { fetchProfil, logoutUser, updateProfil } from "../api";
+import { fetchProfil, logoutUser, updateProfil, envoyerCodeConfirmation, confirmerChangementMdp, fetchEspace } from "../api";
 
 function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
   const navigate = useNavigate();
   const estSombre = theme === "sombre";
 
   const [profil, setProfil] = useState(null);
+  const [espace, setEspace] = useState(null); // NOUVEAU
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [message, setMessage] = useState("");
@@ -14,15 +15,26 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
   const [nouveauPassword, setNouveauPassword] = useState("");
   const [confirmationPassword, setConfirmationPassword] = useState("");
 
+  const [codeEnvoye, setCodeEnvoye] = useState(false);
+  const [code, setCode] = useState("");
+
   useEffect(() => {
     const chargerProfil = async () => {
       try {
-        const data = await fetchProfil();
-        if (data.username) {
-          setProfil(data);
-          setNouveauUsername(data.username);
+        const [dataProfil, dataEspace] = await Promise.all([
+          fetchProfil(),
+          fetchEspace()
+        ]);
+
+        if (dataProfil.username) {
+          setProfil(dataProfil);
+          setNouveauUsername(dataProfil.username);
         } else {
           setErreur("Impossible de charger le profil");
+        }
+
+        if (dataEspace && dataEspace.used_mb !== undefined) {
+          setEspace(dataEspace);
         }
       } catch (error) {
         setErreur("Erreur lors du chargement du profil");
@@ -38,23 +50,71 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
     setErreur("");
     setMessage("");
 
-    if (nouveauPassword && nouveauPassword !== confirmationPassword) {
-      setErreur("La confirmation du mot de passe ne correspond pas.");
-      return;
+    // Si un nouveau mot de passe est saisi
+    if (nouveauPassword) {
+      if (nouveauPassword !== confirmationPassword) {
+        setErreur("La confirmation du mot de passe ne correspond pas.");
+        return;
+      }
+      if (nouveauPassword.length < 6) {
+        setErreur("Le mot de passe doit contenir au moins 6 caractères.");
+        return;
+      }
+
+      // Si le code n'a pas encore été envoyé, on l'envoie
+      if (!codeEnvoye) {
+        try {
+          const res = await envoyerCodeConfirmation();
+          if (res.message) {
+            setMessage("Code de confirmation envoyé par email. Veuillez le saisir puis réenregistrer.");
+            setCodeEnvoye(true);
+            return; // On s'arrête là, on ne change pas encore le mot de passe
+          } else {
+            setErreur(res.erreur || "Erreur lors de l'envoi du code.");
+            return;
+          }
+        } catch (error) {
+          setErreur("Impossible de contacter le serveur.");
+          return;
+        }
+      }
+
+      // Si le code a déjà été envoyé et que l'utilisateur l'a saisi, on valide
+      if (codeEnvoye && code) {
+        try {
+          const res = await confirmerChangementMdp(code, nouveauPassword);
+          if (res.message) {
+            setMessage("Mot de passe modifié avec succès !");
+            setNouveauPassword("");
+            setConfirmationPassword("");
+            setCode("");
+            setCodeEnvoye(false);
+            
+            // On met à jour le username en même temps
+            const payload = { username: nouveauUsername };
+            await updateProfil(payload);
+            setProfil((prev) => ({ ...prev, username: nouveauUsername }));
+            localStorage.setItem("username", nouveauUsername);
+            
+            return;
+          } else {
+            setErreur(res.erreur || "Code invalide ou expiré.");
+            return;
+          }
+        } catch (error) {
+          setErreur("Erreur lors de la confirmation.");
+          return;
+        }
+      }
     }
 
+    // Si pas de mot de passe, ou après validation réussie, on enregistre le username simplement
     try {
-      const payload = {
-        username: nouveauUsername,
-        ...(nouveauPassword ? { password: nouveauPassword } : {}),
-      };
-
+      const payload = { username: nouveauUsername };
       await updateProfil(payload);
       setProfil((prev) => ({ ...prev, username: nouveauUsername }));
       localStorage.setItem("username", nouveauUsername);
       setMessage("Profil mis à jour avec succès.");
-      setNouveauPassword("");
-      setConfirmationPassword("");
     } catch (error) {
       setErreur(error.message || "Erreur lors de la mise à jour du profil");
     }
@@ -85,35 +145,6 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
       fontFamily: "sans-serif",
       transition: "all 0.3s ease",
     },
-    navbar: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      padding: "20px 40px",
-      borderBottom: `1px solid ${estSombre ? "#111111" : "#e5e5e5"}`,
-      backgroundColor: estSombre ? "#000000" : "#ffffff",
-    },
-    logo: {
-      fontSize: "1.4rem",
-      fontWeight: "700",
-      color: "#00bcd4",
-      textDecoration: "none",
-    },
-    navLinks: { display: "flex", gap: "25px", alignItems: "center" },
-    navItem: {
-      color: estSombre ? "#ffffff" : "#1d1d1f",
-      textDecoration: "none",
-      fontSize: "0.95rem",
-    },
-    btnTheme: {
-      backgroundColor: "transparent",
-      border: `1px solid ${estSombre ? "#333333" : "#cccccc"}`,
-      color: estSombre ? "#ffffff" : "#1d1d1f",
-      padding: "6px 12px",
-      borderRadius: "6px",
-      cursor: "pointer",
-      fontSize: "0.85rem",
-    },
     mainContent: { padding: "60px 20px", maxWidth: "600px", margin: "0 auto" },
     userCard: {
       backgroundColor: estSombre ? "#0a0a0a" : "#ffffff",
@@ -142,12 +173,15 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
       fontSize: "1.1rem",
       fontWeight: "bold",
     },
-    infoText: {
+    espaceBadge: {
       width: "100%",
+      backgroundColor: estSombre ? "#121212" : "#f0f0f2",
+      border: `1px solid ${estSombre ? "#222222" : "#e0e0e0"}`,
+      color: estSombre ? "#ffffff" : "#1d1d1f",
+      padding: "15px",
+      borderRadius: "10px",
       textAlign: "left",
       fontSize: "0.9rem",
-      color: estSombre ? "#888888" : "#666666",
-      margin: "5px 0",
     },
     form: {
       width: "100%",
@@ -192,12 +226,14 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
       color: "#10b981",
       fontSize: "0.9rem",
       margin: 0,
+      textAlign: "left",
     },
     error: {
       width: "100%",
       color: "#ef4444",
       fontSize: "0.9rem",
       margin: 0,
+      textAlign: "left",
     },
   };
 
@@ -213,7 +249,7 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
     );
   }
 
-  if (erreur) {
+  if (erreur && !profil) {
     return (
       <div style={styles.container}>
         <div style={styles.mainContent}>
@@ -222,6 +258,9 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
       </div>
     );
   }
+
+  // Calcul pour l'affichage de la jauge
+  const pourcentageEspace = espace ? Math.min((espace.used_mb / espace.max_mb) * 100, 100) : 0;
 
   return (
     <div style={styles.container}>
@@ -252,6 +291,26 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
             {(profil?.nombre_sites || 0) > 1 ? "s" : ""}
           </div>
 
+          {/* NOUVEAU BLOC : Informations d'espace */}
+          {espace && (
+            <div style={styles.espaceBadge}>
+              <strong>💾 Stockage utilisé :</strong> {espace.used_mb} Mo / {espace.max_mb} Mo
+              <div style={{ 
+                width: '100%', height: '6px', backgroundColor: estSombre ? '#333' : '#ddd', 
+                borderRadius: '3px', marginTop: '8px', overflow: 'hidden' 
+              }}>
+                <div style={{ 
+                  width: `${pourcentageEspace}%`, height: '100%', 
+                  backgroundColor: pourcentageEspace > 90 ? '#ef4444' : '#00bcd4', 
+                  borderRadius: '3px' 
+                }} />
+              </div>
+              <p style={{ margin: '8px 0 0 0', color: estSombre ? '#888' : '#666' }}>
+                Fichiers : {espace.used_files} / {espace.max_files}
+              </p>
+            </div>
+          )}
+
           <form style={styles.form} onSubmit={handleSauvegarderProfil}>
             <input
               type="text"
@@ -274,6 +333,17 @@ function Profil({ onDeconnexion, theme = "sombre", onChangerTheme }) {
               placeholder="Confirmer le mot de passe"
               style={styles.input}
             />
+
+            {/* Le champ code apparaît ici après le premier clic sur Enregistrer */}
+            {codeEnvoye && (
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Code de confirmation reçu par email"
+                style={styles.input}
+              />
+            )}
 
             {erreur ? <p style={styles.error}>{erreur}</p> : null}
             {message ? <p style={styles.message}>{message}</p> : null}

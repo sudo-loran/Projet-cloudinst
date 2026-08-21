@@ -1,50 +1,211 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { createSite, saveFichier, deleteSite, publishSite, fetchContenuSite, getSiteUrl, copierLien } from '../api';
+import { createSite, saveFichier, deleteSite, publishSite, fetchContenuSite, getSiteUrl, copierLien, fetchFichiersSite } from '../api';
 
 function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite, theme = 'sombre', onChangerTheme }) {
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const estSombre = theme === 'sombre';
 
   const [nomSite, setNomSite] = useState('');
   const [visibilite, setVisibilite] = useState('prive');
-  const [code, setCode] = useState(
-`<!DOCTYPE html>
+  const [fichiers, setFichiers] = useState({
+    'index.html': `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mon Site</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #121212; color: #fff; }
-    h1 { color: #00bcd4; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>Hello World !</h1>
   <p>Bienvenue sur mon site CloudInst.</p>
+  <script src="script.js"></script>
 </body>
-</html>`
-  );
+</html>`,
+    'style.css': `body { font-family: sans-serif; padding: 20px; background: #121212; color: #fff; }
+h1 { color: #00bcd4; }`,
+    'script.js': `console.log("Site chargé !");`
+  });
+  const [fichierActif, setFichierActif] = useState('index.html');
+  const [importSummary, setImportSummary] = useState(null);
+  const [messageNonStatiques, setMessageNonStatiques] = useState('');
 
-  const [fichierImporte, setFichierImporte] = useState(null);
   const [modeRedaction, setModeRedaction] = useState(false);
   const [erreur, setErreur] = useState('');
   const [siteAafficher, setSiteAafficher] = useState(null);
   const [siteEnEdition, setSiteEnEdition] = useState(null);
   const [chargement, setChargement] = useState(false);
 
-  const gererFichier = (e) => {
+  const genererApercuComplet = (htmlPrincipal, tousLesFichiers) => {
+    if (!htmlPrincipal) return '';
+    let htmlFinal = htmlPrincipal;
+    htmlFinal = htmlFinal.replace(/<link[^>]*href="([^"]+\.css)"[^>]*>/g, (match, url) => {
+      const cssContent = tousLesFichiers[url];
+      return cssContent ? `<style>${cssContent}</style>` : match;
+    });
+    htmlFinal = htmlFinal.replace(/<script[^>]*src="([^"]+\.js)"[^>]*><\/script>/g, (match, url) => {
+      const jsContent = tousLesFichiers[url];
+      return jsContent ? `<script>${jsContent}</script>` : match;
+    });
+    return htmlFinal;
+  };
+
+  const handleSingleFile = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setFichierImporte(file.name);
       const reader = new FileReader();
       reader.onload = (evt) => {
-        setCode(evt.target.result);
+        setFichiers((prev) => ({ ...prev, [file.name]: evt.target.result }));
+        setFichierActif(file.name);
         setModeRedaction(true);
       };
       reader.readAsText(file);
+      e.target.value = null;
+    }
+  };
+
+  const handleImportDossier = async (e) => {
+    const fileList = Array.from(e.target.files);
+    if (fileList.length === 0) return;
+
+    setChargement(true);
+    let totalSize = 0;
+    const importedFichiers = {};
+    const ignoredFiles = [];
+    const allowedExtensions = ['.html', '.css', '.js', '.txt', '.json'];
+
+    for (const file of fileList) {
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      if (!allowedExtensions.includes(ext)) {
+        ignoredFiles.push(file.name);
+        continue;
+      }
+
+      const path = file.webkitRelativePath || file.name;
+
+      try {
+        const content = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (evt) => resolve(evt.target.result);
+          reader.onerror = () => reject(new Error("Erreur de lecture"));
+          reader.readAsText(file);
+        });
+        importedFichiers[path] = content;
+        totalSize += file.size;
+      } catch (error) {
+        ignoredFiles.push(file.name);
+      }
+    }
+
+    if (Object.keys(importedFichiers).length === 0) {
+      setChargement(false);
+      alert("Aucun fichier texte (HTML/CSS/JS) trouvé dans ce dossier.");
+      return;
+    }
+
+    if (ignoredFiles.length > 0) {
+      setMessageNonStatiques(`Les fichiers suivants ont été ignorés car ils ne sont pas statiques (textes) : ${ignoredFiles.slice(0, 5).join(', ')}${ignoredFiles.length > 5 ? '...' : ''}`);
+      setTimeout(() => setMessageNonStatiques(''), 5000);
+    } else {
+      setMessageNonStatiques('');
+    }
+
+    setFichiers(prev => ({ ...prev, ...importedFichiers }));
+    setImportSummary({
+      count: Object.keys(importedFichiers).length,
+      sizeMB: (totalSize / (1024 * 1024)).toFixed(2)
+    });
+    setFichierActif(Object.keys(importedFichiers)[0] || 'index.html');
+    setModeRedaction(true);
+    setChargement(false);
+    e.target.value = null;
+  };
+
+  const handleCreerFichier = () => {
+    const nom = window.prompt("Nom du fichier (ex: page.html) :");
+    if (!nom) return;
+    if (fichiers[nom]) {
+      alert("Ce fichier existe déjà !");
+      return;
+    }
+    setFichiers(prev => ({ ...prev, [nom]: '' }));
+    setFichierActif(nom);
+  };
+
+  const handleCreerDossier = () => {
+    const nom = window.prompt("Nom du dossier (ex: styles) :");
+    if (!nom) return;
+    const cheminDossier = nom.endsWith('/') ? nom : nom + '/';
+    const fichierTest = cheminDossier + 'index.html';
+    if (fichiers[fichierTest]) {
+      alert("Ce dossier existe déjà ou contient un index.html !");
+      return;
+    }
+    setFichiers(prev => ({ ...prev, [fichierTest]: '' }));
+    setFichierActif(fichierTest);
+  };
+
+  const handleSupprimerElement = (chemin) => {
+    const estDossier = chemin.endsWith('/');
+    const nomPourConfirmation = estDossier ? `dossier "${chemin.slice(0, -1)}"` : `fichier "${chemin}"`;
+    
+    if (!window.confirm(`Voulez-vous vraiment supprimer le ${nomPourConfirmation} ?`)) return;
+
+    if (estDossier) {
+      const nouveauxFichiers = {};
+      Object.keys(fichiers).forEach(key => {
+        if (!key.startsWith(chemin)) {
+          nouveauxFichiers[key] = fichiers[key];
+        }
+      });
+      setFichiers(nouveauxFichiers);
+      if (fichierActif.startsWith(chemin)) {
+        setFichierActif(Object.keys(nouveauxFichiers)[0] || '');
+      }
+    } else {
+      const nouveauxFichiers = { ...fichiers };
+      delete nouveauxFichiers[chemin];
+      setFichiers(nouveauxFichiers);
+      if (fichierActif === chemin) {
+        setFichierActif(Object.keys(nouveauxFichiers)[0] || '');
+      }
+    }
+  };
+
+  const handleRenommerElement = (chemin) => {
+    const estDossier = chemin.endsWith('/');
+    const ancienNom = estDossier ? chemin.slice(0, -1) : chemin;
+    const nouveauNom = window.prompt(`Nouveau nom pour "${ancienNom}" :`, ancienNom);
+    
+    if (!nouveauNom || nouveauNom === ancienNom) return;
+
+    if (estDossier) {
+      const nouveauCheminDossier = nouveauNom.endsWith('/') ? nouveauNom : nouveauNom + '/';
+      const nouveauxFichiers = {};
+      Object.keys(fichiers).forEach(key => {
+        if (key.startsWith(chemin)) {
+          const nouvelleCle = key.replace(chemin, nouveauCheminDossier);
+          nouveauxFichiers[nouvelleCle] = fichiers[key];
+        } else {
+          nouveauxFichiers[key] = fichiers[key];
+        }
+      });
+      setFichiers(nouveauxFichiers);
+      if (fichierActif.startsWith(chemin)) {
+        setFichierActif(fichierActif.replace(chemin, nouveauCheminDossier));
+      }
+    } else {
+      const nouveauxFichiers = { ...fichiers };
+      const contenu = nouveauxFichiers[chemin];
+      delete nouveauxFichiers[chemin];
+      nouveauxFichiers[nouveauNom] = contenu;
+      setFichiers(nouveauxFichiers);
+      if (fichierActif === chemin) {
+        setFichierActif(nouveauNom);
+      }
     }
   };
 
@@ -94,20 +255,24 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
         return;
       }
 
-      const resFichier = await saveFichier(resSite.id, 'index.html', code);
-
-      if (resFichier.erreur) {
-        setErreur(resFichier.erreur);
-        setChargement(false);
-        return;
+      const entries = Object.entries(fichiers);
+      for (const [filename, contenu] of entries) {
+        if (contenu === '' && filename.endsWith('index.html')) continue;
+        
+        const resFichier = await saveFichier(resSite.id, filename, contenu);
+        if (resFichier.erreur) {
+          setErreur(resFichier.erreur);
+          setChargement(false);
+          return;
+        }
       }
 
       if (onAjouterSite) {
-        onAjouterSite(resSite); 
+        onAjouterSite(resSite);
       }
 
       setNomSite('');
-      setFichierImporte(null);
+      setImportSummary(null);
       setErreur('');
       setModeRedaction(false);
 
@@ -150,8 +315,18 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   const handleEditSite = async (site) => {
     setChargement(true);
     try {
-      const contenu = await fetchContenuSite(site.sous_domaine);
-      setSiteEnEdition({ ...site, code: contenu });
+      const data = await fetchFichiersSite(site.id);
+      const fichiersDict = {};
+      if (data.fichiers && Array.isArray(data.fichiers)) {
+        data.fichiers.forEach(f => {
+          fichiersDict[f.filename] = f.contenu;
+        });
+      }
+      setSiteEnEdition({
+        ...site,
+        fichiers: Object.keys(fichiersDict).length > 0 ? fichiersDict : { 'index.html': 'Contenu vide' },
+        fichierActif: Object.keys(fichiersDict)[0] || 'index.html'
+      });
     } catch (error) {
       setErreur("Impossible de charger le contenu du site");
     } finally {
@@ -160,10 +335,13 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   };
 
   const handleSaveEdit = async () => {
-    if (!siteEnEdition) return;
+    if (!siteEnEdition || !siteEnEdition.fichiers) return;
     setChargement(true);
     try {
-      await saveFichier(siteEnEdition.id, 'index.html', siteEnEdition.code);
+      const entries = Object.entries(siteEnEdition.fichiers);
+      for (const [filename, contenu] of entries) {
+        await saveFichier(siteEnEdition.id, filename, contenu);
+      }
       onModifierSite(siteEnEdition);
       setSiteEnEdition(null);
     } catch (error) {
@@ -183,17 +361,6 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
     } finally {
       setChargement(false);
     }
-  };
-
-  const handleMultipleFiles = async (files) => {
-    for (const file of files) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        await saveFichier(site.id, file.name, e.target.result);
-      };
-      reader.readAsText(file);
-    }
-    alert(`${files.length} fichiers importés avec succès !`);
   };
 
   const styles = {
@@ -247,6 +414,10 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
     btnSecondary: { flex: '1', padding: '12px 20px', borderRadius: '8px', border: '1px solid #00bcd4', backgroundColor: 'transparent', color: '#00bcd4', fontSize: '0.95rem', fontWeight: '600', cursor: 'pointer' },
     btnPrimary: { padding: '12px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#00bcd4', color: '#000000', fontSize: '0.95rem', fontWeight: '600', cursor: 'pointer' },
     btnCancel: { padding: '12px 20px', borderRadius: '8px', border: '1px solid #333333', backgroundColor: 'transparent', color: '#888888', fontSize: '0.95rem', cursor: 'pointer' },
+    editorGrid: { display: 'flex', height: '480px', marginTop: '20px', gap: '0' },
+    explorerBox: { width: '220px', border: `1px solid ${estSombre ? '#222' : '#ddd'}`, backgroundColor: estSombre ? '#121212' : '#ffffff', borderRadius: '8px 0 0 8px', overflow: 'hidden' },
+    editorBox: { flex: 1, border: `1px solid ${estSombre ? '#222' : '#ddd'}`, borderLeft: 'none', borderRadius: '0 8px 8px 0', overflow: 'hidden' },
+    previewBox: { flex: 1, border: '1px solid #222222', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#ffffff' },
     erreurBox: { backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '20px' },
     sectionTitle: { fontSize: '1.4rem', marginBottom: '20px' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
@@ -275,11 +446,7 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
       color: estSombre ? '#00bcd4' : '#007b9e',
       fontFamily: 'monospace'
     },
-    boutonsLien: {
-      display: 'flex',
-      gap: '8px',
-      marginTop: '5px'
-    },
+    boutonsLien: { display: 'flex', gap: '8px', marginTop: '5px' },
     btnCopier: {
       flex: '1',
       padding: '6px 10px',
@@ -306,7 +473,6 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
 
   return (
     <div style={styles.container}>
-      {/* ICI : Ajout des classes CSS et de la Media Query pour la responsivité mobile */}
       <style>{`
         .menu-wrapper { position: relative; display: inline-block; }
         .btn-dots { background: transparent; border: none; cursor: pointer; padding: 0 5px; line-height: 1; }
@@ -325,52 +491,21 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
         .menu-light .dropdown-menu { background-color: #ffffff; border: 1px solid #e5e5e5; }
         .menu-light .dropdown-menu button { color: #1d1d1f; }
 
-        /* NOUVEAU : Layout responsive pour l'éditeur et le modal */
-        .editor-layout {
-          display: flex;
-          gap: 20px;
-          height: 480px;
-          margin-top: 20px;
-        }
-        .editor-pane {
-          flex: 1;
-          border: 1px solid #222222;
-          border-radius: 8px;
-          overflow: hidden;
-        }
-        .preview-pane {
-          flex: 1;
-          border: 1px solid #222222;
-          border-radius: 8px;
-          overflow: hidden;
-          background-color: #ffffff;
-        }
-
-        /* Media Query pour écrans mobiles et tablettes (largeur < 768px) */
+        .editor-layout { display: flex; gap: 20px; height: 480px; margin-top: 20px; }
         @media (max-width: 768px) {
-          .editor-layout {
-            flex-direction: column;
-            height: auto;
-            min-height: 80vh;
-            gap: 15px;
-          }
-          .editor-pane, .preview-pane {
-            width: 100%;
-            flex: none;
-            height: 40vh; /* 40% de la hauteur de l'écran pour chaque partie */
-            min-height: 250px;
-          }
+          .editor-layout { flex-direction: column; height: auto; min-height: 80vh; gap: 15px; }
+          .explorer-pane { width: 100% !important; height: 150px; }
+          .editor-pane, .preview-pane { width: 100%; height: 40vh; min-height: 250px; flex: none; }
         }
       `}</style>
       
       <div style={styles.wrapper}>
         <div style={styles.header}>
-          <h1 style={styles.title}>Créer un projet statique</h1>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>            
-          </div>
+          
         </div>
 
         {erreur && <div style={styles.erreurBox}>{erreur}</div>}
+        {messageNonStatiques && <div style={{ ...styles.erreurBox, backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#f59e0b' }}>{messageNonStatiques}</div>}
 
         <div style={styles.cardPanel}>
           <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -380,7 +515,7 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
               onChange={(e) => setVisibilite(e.target.value)}
               style={styles.selectVisibilite}
             >
-              <option value="prive">Privé </option>
+              <option value="prive">Privé</option>
               <option value="public">Public</option>
             </select>
           </div>
@@ -394,10 +529,24 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
                 onChange={(e) => setNomSite(e.target.value)}
                 style={styles.input}
               />
-              <input type="file" ref={fileInputRef} accept=".html,.css,.js,.txt" onChange={gererFichier} style={{ display: 'none' }} />
+              
+              <input type="file" ref={fileInputRef} onChange={handleSingleFile} style={{ display: 'none' }} />
               <button style={styles.btnSecondary} onClick={() => fileInputRef.current.click()}>
-                {fichierImporte ? fichierImporte : 'Importer un fichier'}
+                Importer un fichier
               </button>
+
+              <input 
+                type="file" 
+                ref={folderInputRef} 
+                onChange={handleImportDossier} 
+                style={{ display: 'none' }} 
+                webkitdirectory="" 
+                directory="" 
+              />
+              <button style={styles.btnSecondary} onClick={() => folderInputRef.current.click()}>
+                Importer un dossier
+              </button>
+
               <button style={styles.btnPrimary} onClick={() => setModeRedaction(true)}>
                 Rédiger du code
               </button>
@@ -412,18 +561,91 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
                   onChange={(e) => setNomSite(e.target.value)}
                   style={styles.input}
                 />
+                <button style={styles.btnSecondary} onClick={handleCreerFichier}>
+                  Ajouter un fichier
+                </button>
+                <button style={styles.btnSecondary} onClick={handleCreerDossier}>
+                  Ajouter un dossier
+                </button>
                 <button style={styles.btnCancel} onClick={() => setModeRedaction(false)}>Masquer l'éditeur</button>
                 <button style={styles.btnPrimary} onClick={handleSubmit} disabled={chargement}>
                   {chargement ? 'Enregistrement...' : 'Enregistrer & Publier'}
                 </button>
               </div>
 
-              <div className="editor-layout">
-                <div className="editor-pane">
-                  <Editor height="100%" defaultLanguage="html" theme={estSombre ? "vs-dark" : "light"} value={code} onChange={(val) => setCode(val || '')} />
+              {importSummary && (
+                <div style={{
+                  marginBottom: '15px', padding: '10px 15px',
+                  backgroundColor: estSombre ? '#1a1a1a' : '#e5e5e5',
+                  borderRadius: '6px', fontSize: '0.9rem',
+                  display: 'flex', justifyContent: 'space-between'
+                }}>
+                  <span> Fichiers importés : <strong>{importSummary.count}</strong></span>
+                  <span> Taille totale : <strong>{importSummary.sizeMB} Mo</strong></span>
                 </div>
-                <div className="preview-pane">
-                  <iframe srcDoc={code} title="Aperçu statique" sandbox="allow-scripts" style={{ width: '100%', height: '100%', border: 'none' }} />
+              )}
+
+              <div className="editor-layout">
+                <div className="explorer-pane" style={{ width: '220px', border: `1px solid ${estSombre ? '#222' : '#ddd'}`, backgroundColor: estSombre ? '#121212' : '#ffffff', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px', borderBottom: `1px solid ${estSombre ? '#222' : '#ddd'}`, fontWeight: 'bold', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Explorateur</span>
+                  </div>
+                  <div style={{ overflowY: 'auto', height: '100%', padding: '5px 10px' }}>
+                    {Object.keys(fichiers).map((nom) => (
+                      <div
+                        key={nom}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          padding: '6px 10px',
+                          color: estSombre ? '#ccc' : '#444',
+                          backgroundColor: fichierActif === nom ? (estSombre ? '#2a2d2e' : '#e5e5e5') : 'transparent',
+                          borderRadius: '4px',
+                          fontSize: '0.85rem',
+                          marginBottom: '4px'
+                        }}
+                      >
+                        <span 
+                          onClick={() => setFichierActif(nom)}
+                          style={{ display: 'flex', alignItems: 'center', flex: 1 }}
+                        >
+                          {nom}
+                        </span>
+                        
+                        {/* CORRECTION ICI : AJOUT DE LA CLASSE MENU-DARK OU MENU-LIGHT */}
+                        <div className={`menu-wrapper ${estSombre ? 'menu-dark' : 'menu-light'}`} onClick={(e) => e.stopPropagation()}>
+                          <button className="btn-dots" onClick={(e) => toggleMenu(e.currentTarget)}>⋮</button>
+                          <div className="dropdown-menu">
+                            <button onClick={() => handleRenommerElement(nom)}>Renommer</button>
+                            <button onClick={() => setFichierActif(nom)}>Éditer</button>
+                            <button className="btn-danger" onClick={() => handleSupprimerElement(nom)}>Supprimer</button>
+                          </div>
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="editor-pane" style={{ flex: 1, border: `1px solid ${estSombre ? '#222' : '#ddd'}`, borderRadius: '8px', overflow: 'hidden' }}>
+                  <Editor 
+                    height="100%" 
+                    language={fichierActif.endsWith('.css') ? 'css' : fichierActif.endsWith('.js') ? 'javascript' : 'html'} 
+                    theme={estSombre ? "vs-dark" : "light"} 
+                    value={fichiers[fichierActif] || ''} 
+                    onChange={(val) => setFichiers({ ...fichiers, [fichierActif]: val || '' })} 
+                  />
+                </div>
+
+                <div className="preview-pane" style={{ flex: 1, border: `1px solid ${estSombre ? '#222' : '#ddd'}`, borderRadius: '8px', overflow: 'hidden', backgroundColor: '#ffffff' }}>
+                  <iframe 
+                    srcDoc={genererApercuComplet(fichiers['index.html'] || '', fichiers)} 
+                    title="Aperçu statique" 
+                    sandbox="allow-scripts" 
+                    style={{ width: '100%', height: '100%', border: 'none' }} 
+                  />
                 </div>
               </div>
             </div>
@@ -491,11 +713,52 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
             </div>
           </div>
           <div className="editor-layout" style={{ height: '100%', marginTop: '0px' }}>
-            <div className="editor-pane" style={{ flex: 1 }}>
-              <Editor height="100%" defaultLanguage="html" theme={estSombre ? "vs-dark" : "light"} value={siteEnEdition.code} onChange={(val) => setSiteEnEdition({ ...siteEnEdition, code: val || '' })} />
+            <div className="explorer-pane" style={{ width: '220px', border: `1px solid ${estSombre ? '#222' : '#ddd'}`, backgroundColor: estSombre ? '#121212' : '#ffffff', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ padding: '10px', borderBottom: `1px solid ${estSombre ? '#222' : '#ddd'}`, fontWeight: 'bold', fontSize: '0.85rem' }}>
+                Explorateur
+              </div>
+              <div style={{ overflowY: 'auto', height: '100%', padding: '5px 10px' }}>
+                {Object.keys(siteEnEdition.fichiers || {}).map((nom) => (
+                  <div
+                    key={nom}
+                    onClick={() => setSiteEnEdition({ ...siteEnEdition, fichierActif: nom })}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '6px 10px',
+                      color: estSombre ? '#ccc' : '#444',
+                      backgroundColor: siteEnEdition.fichierActif === nom ? (estSombre ? '#2a2d2e' : '#e5e5e5') : 'transparent',
+                      borderRadius: '4px',
+                      fontSize: '0.85rem',
+                      marginBottom: '4px',
+                      display: 'flex', alignItems: 'center'
+                    }}
+                  >
+                    {nom}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="preview-pane" style={{ flex: 1, backgroundColor: '#fff' }}>
-              <iframe srcDoc={siteEnEdition.code} title="Aperçu édition" sandbox="allow-scripts" style={{ width: '100%', height: '100%', border: 'none' }} />
+
+            <div className="editor-pane" style={{ flex: 1, border: `1px solid ${estSombre ? '#222' : '#ddd'}`, borderRadius: '8px', overflow: 'hidden' }}>
+              <Editor 
+                height="100%" 
+                language={siteEnEdition.fichierActif?.endsWith('.css') ? 'css' : siteEnEdition.fichierActif?.endsWith('.js') ? 'javascript' : 'html'} 
+                theme={estSombre ? "vs-dark" : "light"} 
+                value={siteEnEdition.fichiers ? siteEnEdition.fichiers[siteEnEdition.fichierActif] : ''} 
+                onChange={(val) => setSiteEnEdition({ 
+                  ...siteEnEdition, 
+                  fichiers: { ...siteEnEdition.fichiers, [siteEnEdition.fichierActif]: val || '' } 
+                })} 
+              />
+            </div>
+
+            <div className="preview-pane" style={{ flex: 1, backgroundColor: '#fff', border: `1px solid ${estSombre ? '#222' : '#ddd'}`, borderRadius: '8px', overflow: 'hidden' }}>
+              <iframe 
+                srcDoc={genererApercuComplet(siteEnEdition.fichiers?.['index.html'] || '', siteEnEdition.fichiers || {})} 
+                title="Aperçu édition" 
+                sandbox="allow-scripts" 
+                style={{ width: '100%', height: '100%', border: 'none' }} 
+              />
             </div>
           </div>
         </div>
